@@ -9,9 +9,11 @@ uid: Overview.Mvux.Overview
 
 ## Why MVUX?
 
-To better understand the need for MVUX, let us consider a weather application that will display the current temperature, obtained from an external weather service. At face value, this seems simple enough. All the app has to do is call a service to retrieve latest temperature and display the returned value. For example, the following MainViewModel initializes the CurrentWeather property with the current weather information obtained from the weather service:
+To better understand the need for MVUX, let us consider a weather application that will display the current temperature, obtained from an external weather service. At face value, this seems simple enough. All the app has to do is call a service to retrieve latest temperature and display the returned value. 
+
+For example, the following MainViewModel initializes the CurrentWeather property with the current weather information obtained from the weather service. The XAML binds the CurrentWeather property of the DataContext (an instance of the MainViewModel) to the Text property of a TextBlock
   
-# [**C#**](#tab/csharp)
+# [C#](#tab/csharp)
 
 ```csharp
 public partial class MainViewModel : ObservableObject
@@ -33,9 +35,9 @@ public partial class MainViewModel : ObservableObject
     }
 }
 ```
+The `ObservableObject` comes from the `CommunityToolkit.Mvvm` package and provides an implementation of INotifyPropertyChanged, which is used to notify the UI when property values change. The `ObservableProperty` attribute (also from the `CommunityToolkit.Mvvm` package) is used to instruct the source code generator to emit properties that include raising the PropertyChanged event when the value changes. In this case the `CurrentWeather` property is generated and will raise the PropertyChanged event when the value is set in the `LoadWeather` method.
 
-# [**XAML**](#tab/xaml)
-The following XAML binds the CurrentWeather property of the DataContext (an instance of the MainViewModel) to the Text property of a TextBlock:
+# [XAML](#tab/xaml)
 
 ```xml
 <Page x:Class="WeatherSampleApp.MainPage"
@@ -47,21 +49,248 @@ The following XAML binds the CurrentWeather property of the DataContext (an inst
 	</StackPanel>
 </Page>
 ```
------
+----
+Here's this simple application running:  
+![Mvvm Weather App](Assets/MvvmWeather.jpg)
 
 
-As this code snippet shows, calling the GetCurrentWeather and displaying the resulting Temperature using XAML is simple enough. However, there are a few things we should consider:
+Calling the GetCurrentWeather and displaying the resulting Temperature using XAML is simple enough. However, there are a few things we should consider:
 
 - If the GetCurrentWeather method takes a finite amount of time to complete, what should be displayed while the app is waiting for the result?
 - If the GetCurrentWeather service fails, for example due to network issues, should the app display an error?
 - If the GetCurrentWeather service returns no data, what should the app show?
 - How can the user force the data to be refreshed?
 
+The following updated code addresses these points. As you can the updated code is significantly more complex than the original code.
 
+# [C#](#tab/csharp)
 
-Individually, these questions are simple enough to handle, but hopefully, they highlight that there is more to consider in even a very trivial application. Now imagine an application that has more complex data and user interface, the potential for complexity and the amount of required code can grow enormously.
+```csharp
+public partial class MainViewModel : ObservableObject
+{
+    private readonly IWeatherService _weather;
 
-MVUX is a response to such situations and makes it easier to handle the above scenarios.  
+    [ObservableProperty]
+    private WeatherInfo? _currentWeather;
+
+    [ObservableProperty]
+    private bool _isError;
+
+    [ObservableProperty]
+    private bool _noResults;
+
+    public MainViewModel(IWeatherService Weather)
+    {
+        _weather = Weather;
+        LoadWeatherCommand.Execute(default);
+    }
+
+    [RelayCommand]
+    public async Task LoadWeather()
+    {
+        try
+        {
+            IsError = false;
+
+            CurrentWeather = await _weather.GetCurrentWeather();
+            NoResults = CurrentWeather is null;
+        }
+        catch
+        {
+            IsError = true;
+        }
+    }
+}
+```
+
+# [XAML](#tab/xaml)
+
+```xml
+<Page x:Class="WeatherSampleApp.MainPage"
+	  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+	  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+	<StackPanel HorizontalAlignment="Center"
+				VerticalAlignment="Center">
+		<VisualStateManager.VisualStateGroups>
+			<VisualStateGroup>
+				<VisualState x:Name="LoadIsRunning">
+					<VisualState.StateTriggers>
+						<StateTrigger IsActive="{Binding LoadWeatherCommand.IsRunning}" />
+					</VisualState.StateTriggers>
+					<VisualState.Setters>
+						<Setter Target="LoadingProgress.Visibility"
+								Value="Visible" />
+						<Setter Target="TemperatureTextBlock.Visibility"
+								Value="Collapsed" />
+					</VisualState.Setters>
+				</VisualState>
+
+				<VisualState x:Name="LoadError">
+					<VisualState.StateTriggers>
+						<StateTrigger IsActive="{Binding IsError}" />
+					</VisualState.StateTriggers>
+					<VisualState.Setters>
+						<Setter Target="ErrorText.Visibility"
+								Value="Visible" />
+						<Setter Target="TemperatureTextBlock.Visibility"
+								Value="Collapsed" />
+					</VisualState.Setters>
+				</VisualState>
+
+				<VisualState x:Name="LoadNoResults">
+					<VisualState.StateTriggers>
+						<StateTrigger IsActive="{Binding NoResults}" />
+					</VisualState.StateTriggers>
+					<VisualState.Setters>
+						<Setter Target="NoResultsText.Visibility"
+								Value="Visible" />
+						<Setter Target="TemperatureTextBlock.Visibility"
+								Value="Collapsed" />
+					</VisualState.Setters>
+				</VisualState>
+
+				<VisualState x:Name="LoadResults" />
+			</VisualStateGroup>
+		</VisualStateManager.VisualStateGroups>
+
+		<TextBlock x:Name="ErrorText"
+				   Visibility="Collapsed"
+				   Text="Error" />
+		<TextBlock x:Name="NoResultsText"
+				   Visibility="Collapsed"
+				   Text="No Results" />
+		<ProgressRing x:Name="LoadingProgress"
+					  Visibility="Collapsed" />
+
+		<TextBlock x:Name="TemperatureTextBlock">
+			<Run Text="Current temperature: " />
+			<Run Text="{Binding CurrentWeather.Temperature}" />
+		</TextBlock>
+		<Button Command="{Binding LoadWeatherCommand}"
+				Content="Get Weather" />
+	</StackPanel>
+</Page>
+```
+----
+
+Here's the updated application running, showing the progress ring in action while the data is loading and a Get Weather Button for refreshing the data.
+  
+![Mvvm Weather App](Assets/MvvmWeatherUpdated.jpg)
+
+This simple example illustrates how quickly simple code can grow in complexity when we consider the various states that an application can be in. With MVUX we can simplify this code, making it easier to maintain and less error prone.
+
+Let's take a look at an equivalent weather application written using MVUX.
+
+# [C#](#tab/csharp)
+
+```csharp
+public partial class MainViewModel : ObservableObject
+{
+    private readonly IWeatherService _weather;
+
+    [ObservableProperty]
+    private WeatherInfo? _currentWeather;
+
+    [ObservableProperty]
+    private bool _isError;
+
+    [ObservableProperty]
+    private bool _noResults;
+
+    public MainViewModel(IWeatherService Weather)
+    {
+        _weather = Weather;
+        LoadWeatherCommand.Execute(default);
+    }
+
+    [RelayCommand]
+    public async Task LoadWeather()
+    {
+        try
+        {
+            IsError = false;
+
+            CurrentWeather = await _weather.GetCurrentWeather();
+            NoResults = CurrentWeather is null;
+        }
+        catch
+        {
+            IsError = true;
+        }
+    }
+}
+```
+
+# [XAML](#tab/xaml)
+
+```xml
+<Page x:Class="WeatherSampleApp.MainPage"
+	  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+	  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+	<StackPanel HorizontalAlignment="Center"
+				VerticalAlignment="Center">
+		<VisualStateManager.VisualStateGroups>
+			<VisualStateGroup>
+				<VisualState x:Name="LoadIsRunning">
+					<VisualState.StateTriggers>
+						<StateTrigger IsActive="{Binding LoadWeatherCommand.IsRunning}" />
+					</VisualState.StateTriggers>
+					<VisualState.Setters>
+						<Setter Target="LoadingProgress.Visibility"
+								Value="Visible" />
+						<Setter Target="TemperatureTextBlock.Visibility"
+								Value="Collapsed" />
+					</VisualState.Setters>
+				</VisualState>
+
+				<VisualState x:Name="LoadError">
+					<VisualState.StateTriggers>
+						<StateTrigger IsActive="{Binding IsError}" />
+					</VisualState.StateTriggers>
+					<VisualState.Setters>
+						<Setter Target="ErrorText.Visibility"
+								Value="Visible" />
+						<Setter Target="TemperatureTextBlock.Visibility"
+								Value="Collapsed" />
+					</VisualState.Setters>
+				</VisualState>
+
+				<VisualState x:Name="LoadNoResults">
+					<VisualState.StateTriggers>
+						<StateTrigger IsActive="{Binding NoResults}" />
+					</VisualState.StateTriggers>
+					<VisualState.Setters>
+						<Setter Target="NoResultsText.Visibility"
+								Value="Visible" />
+						<Setter Target="TemperatureTextBlock.Visibility"
+								Value="Collapsed" />
+					</VisualState.Setters>
+				</VisualState>
+
+				<VisualState x:Name="LoadResults" />
+			</VisualStateGroup>
+		</VisualStateManager.VisualStateGroups>
+
+		<TextBlock x:Name="ErrorText"
+				   Visibility="Collapsed"
+				   Text="Error" />
+		<TextBlock x:Name="NoResultsText"
+				   Visibility="Collapsed"
+				   Text="No Results" />
+		<ProgressRing x:Name="LoadingProgress"
+					  Visibility="Collapsed" />
+
+		<TextBlock x:Name="TemperatureTextBlock">
+			<Run Text="Current temperature: " />
+			<Run Text="{Binding CurrentWeather.Temperature}" />
+		</TextBlock>
+		<Button Command="{Binding LoadWeatherCommand}"
+				Content="Get Weather" />
+	</StackPanel>
+</Page>
+```
+----
+
 
 ## WeatherApp Sample
 
