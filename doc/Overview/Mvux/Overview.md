@@ -4,28 +4,60 @@ uid: Overview.Mvux.Overview
 
 # MVUX Overview
 
-**M**odel, **V**iew, **U**pdate, e**X**tended (**MVUX**) is an evolution of the MVU design pattern, that encourages unidirectional flow of immutable data. MVUX supports data binding, bringing together the best of the MVU and MVVM design patterns.
+**M**odel, **V**iew, **U**pdate, e**X**tended (**MVUX**) is an implementation of the Model-View-Update design pattern, that encourages the flow of immutable data in a single direction. What differentiates MVUX from other MVU implementations is that it supports both XAML and C# data binding. 
 
-MVUX uses a source code generator to generate bindable proxies for each Model. Additional bindable proxies are generated for other entities where needed.
 
-Bindable proxies are used as a bridge that enables immutable entities to work with the Uno Platform data-binding engine.  
+## Why MVUX?
 
-Changes in the bindable proxies result in parts of the Model being recreated, rather than changing properties. This ensures the Model is immutable, and thus eliminates a large set of potential exceptions and issues related to mutable entities.
-
-## Learning MVUX by samples
-
-To better understand MVUX, let us consider a weather application that will display the current temperature, obtained from an external weather service. At face value, this seems simple enough: call service to retrieve latest temperature and display the returned value.  
+To better understand the need for MVUX, let us consider a weather application that will display the current temperature, obtained from an external weather service. At face value, this seems simple enough. All the app has to do is call a service to retrieve latest temperature and display the returned value. For example, the following MainViewModel initializes the CurrentWeather property with the current weather information obtained from the weather service:
   
-Although this seems like an easy problem, as is often the case, there are more details to consider than may be immediately apparent:
+# [**C#**](#tab/csharp)
 
-- What if the external service isn't immediately available when starting the app?
-- How does the app show that data is being loaded? Or being updated?
-- What if no data is returned from the external service?
-- What if an error occurs while obtaining or processing the data?
-- How to keep the app responsive while loading or updating the UI?
-- How do we refresh the current data?
-- How do we avoid threading or concurrency issues when handling new data in the background?
-- How do we make sure the code is testable?
+```csharp
+public partial class MainViewModel : ObservableObject
+{
+    private readonly IWeatherService _weather;
+
+    [ObservableProperty]
+    private WeatherInfo? _currentWeather;
+
+    public MainViewModel(IWeatherService Weather)
+    {
+        _weather = Weather;
+        _ = LoadWeather();
+    }
+
+    private async Task LoadWeather()
+    {
+        CurrentWeather = await _weather.GetCurrentWeather();
+    }
+}
+```
+
+# [**XAML**](#tab/xaml)
+The following XAML binds the CurrentWeather property of the DataContext (an instance of the MainViewModel) to the Text property of a TextBlock:
+
+```xml
+<Page x:Class="WeatherSampleApp.MainPage"
+	xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+	xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+	<StackPanel HorizontalAlignment="Center"
+				VerticalAlignment="Center">
+		<TextBlock><Run Text="Current temperature: " /><Run Text="{Binding CurrentWeather.Temperature}" /></TextBlock>
+	</StackPanel>
+</Page>
+```
+-----
+
+
+As this code snippet shows, calling the GetCurrentWeather and displaying the resulting Temperature using XAML is simple enough. However, there are a few things we should consider:
+
+- If the GetCurrentWeather method takes a finite amount of time to complete, what should be displayed while the app is waiting for the result?
+- If the GetCurrentWeather service fails, for example due to network issues, should the app display an error?
+- If the GetCurrentWeather service returns no data, what should the app show?
+- How can the user force the data to be refreshed?
+
+
 
 Individually, these questions are simple enough to handle, but hopefully, they highlight that there is more to consider in even a very trivial application. Now imagine an application that has more complex data and user interface, the potential for complexity and the amount of required code can grow enormously.
 
@@ -141,6 +173,14 @@ As refreshing a feed is such a common scenario, the `FeedView` control exposes a
 Clicking the button will execute the `Refresh` command on the `FeedView` which will signal the `IFeed` to reload. In the case of the weather app it would invoke the `GetCurrentWeather` method of the service again.
 
 ### eXtended
+
+MVUX uses a source code generator to generate bindable proxies for each Model. Additional bindable proxies are generated for other entities where needed.
+
+Bindable proxies are used as a bridge that enables immutable entities to work with the data-binding engine.  
+
+Changes in the bindable proxies result in parts of the Model being recreated, rather than changing properties. This ensures the Model is immutable, and thus eliminates a large set of potential exceptions and issues related to mutable entities.
+
+
 
 At this point you might be wondering how we're able to data bind to `CurrentWeather.Temperature`, as if it were a property that returns a single value, and then also bind the `CurrentWeather` property to the `Source` property of the `FeedView` to access a much richer set of information about the `IFeed`.  This is possible because of the bindable proxies that are being generated by the MVUX source code generators.
 
