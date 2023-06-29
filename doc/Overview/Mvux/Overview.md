@@ -184,40 +184,13 @@ Let's take a look at an equivalent weather application written using MVUX.
 # [C#](#tab/csharp)
 
 ```csharp
-public partial class MainViewModel : ObservableObject
+public partial record WeatherModel(IWeatherService WeatherService)
 {
-    private readonly IWeatherService _weather;
-
-    [ObservableProperty]
-    private WeatherInfo? _currentWeather;
-
-    [ObservableProperty]
-    private bool _isError;
-
-    [ObservableProperty]
-    private bool _noResults;
-
-    public MainViewModel(IWeatherService Weather)
-    {
-        _weather = Weather;
-        LoadWeatherCommand.Execute(default);
-    }
-
-    [RelayCommand]
-    public async Task LoadWeather()
-    {
-        try
-        {
-            IsError = false;
-
-            CurrentWeather = await _weather.GetCurrentWeather();
-            NoResults = CurrentWeather is null;
-        }
-        catch
-        {
-            IsError = true;
-        }
-    }
+    public IFeed<WeatherInfo> CurrentWeather => Feed<WeatherInfo>.Async(async ct=>
+        await this.WeatherService.GetCurrentWeather(ct) is { } weather
+                ? Option.Some(weather)
+                : Option.None<WeatherInfo>()
+    );
 }
 ```
 
@@ -226,75 +199,53 @@ public partial class MainViewModel : ObservableObject
 ```xml
 <Page x:Class="WeatherSampleApp.MainPage"
 	  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-	  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+	  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+	  xmlns:mvux="using:Uno.Extensions.Reactive.UI">
 	<StackPanel HorizontalAlignment="Center"
 				VerticalAlignment="Center">
-		<VisualStateManager.VisualStateGroups>
-			<VisualStateGroup>
-				<VisualState x:Name="LoadIsRunning">
-					<VisualState.StateTriggers>
-						<StateTrigger IsActive="{Binding LoadWeatherCommand.IsRunning}" />
-					</VisualState.StateTriggers>
-					<VisualState.Setters>
-						<Setter Target="LoadingProgress.Visibility"
-								Value="Visible" />
-						<Setter Target="TemperatureTextBlock.Visibility"
-								Value="Collapsed" />
-					</VisualState.Setters>
-				</VisualState>
-
-				<VisualState x:Name="LoadError">
-					<VisualState.StateTriggers>
-						<StateTrigger IsActive="{Binding IsError}" />
-					</VisualState.StateTriggers>
-					<VisualState.Setters>
-						<Setter Target="ErrorText.Visibility"
-								Value="Visible" />
-						<Setter Target="TemperatureTextBlock.Visibility"
-								Value="Collapsed" />
-					</VisualState.Setters>
-				</VisualState>
-
-				<VisualState x:Name="LoadNoResults">
-					<VisualState.StateTriggers>
-						<StateTrigger IsActive="{Binding NoResults}" />
-					</VisualState.StateTriggers>
-					<VisualState.Setters>
-						<Setter Target="NoResultsText.Visibility"
-								Value="Visible" />
-						<Setter Target="TemperatureTextBlock.Visibility"
-								Value="Collapsed" />
-					</VisualState.Setters>
-				</VisualState>
-
-				<VisualState x:Name="LoadResults" />
-			</VisualStateGroup>
-		</VisualStateManager.VisualStateGroups>
-
-		<TextBlock x:Name="ErrorText"
-				   Visibility="Collapsed"
-				   Text="Error" />
-		<TextBlock x:Name="NoResultsText"
-				   Visibility="Collapsed"
-				   Text="No Results" />
-		<ProgressRing x:Name="LoadingProgress"
-					  Visibility="Collapsed" />
-
-		<TextBlock x:Name="TemperatureTextBlock">
-			<Run Text="Current temperature: " />
-			<Run Text="{Binding CurrentWeather.Temperature}" />
-		</TextBlock>
-		<Button Command="{Binding LoadWeatherCommand}"
-				Content="Get Weather" />
+		<mvux:FeedView Source="{Binding CurrentWeather}"
+					   x:Name="WeatherFeedView">
+			<mvux:FeedView.ValueTemplate>
+				<DataTemplate>
+					<TextBlock>
+						<Run Text="Current temperature: " />
+						<Run Text="{Binding Data.Temperature}" />
+					</TextBlock>
+				</DataTemplate>
+			</mvux:FeedView.ValueTemplate>
+			<mvux:FeedView.ProgressTemplate>
+				<DataTemplate>
+					<ProgressRing />
+				</DataTemplate>
+			</mvux:FeedView.ProgressTemplate>
+			<mvux:FeedView.ErrorTemplate>
+				<DataTemplate>
+					<TextBlock Text="Error" />
+				</DataTemplate>
+			</mvux:FeedView.ErrorTemplate>
+			<mvux:FeedView.NoneTemplate>
+				<DataTemplate>
+					<TextBlock Text="No Results" />
+				</DataTemplate>
+			</mvux:FeedView.NoneTemplate>
+		</mvux:FeedView>
+		<Button Content="Get Weather"
+				Command="{Binding Refresh, ElementName=WeatherFeedView}" />
 	</StackPanel>
 </Page>
 ```
 ----
 
+Here's a quick summary of the changes:
+- MainModel defines a single property CurrentWeather that returns an `IFeed` of type `WeatherInfo`.
+- Instead of defining additional properties to reflect the state of the GetCurrentWeather call, this information is encapsulated in the `IFeed`.
+- The MainPage XAML has been simplified to use the `FeedView` control, which automatically handles the various states of the feed.
+- The `FeedView` control has a `Source` property that is bound to the `CurrentWeather` property of the `MainModel`.
+- The `FeedView` control has a `ValueTemplate` that defines the UI to display when the feed has a value, `ProgressTemplate` that defines the UI to display when the feed is loading, `ErrorTemplate` that defines the UI to display when the feed has an error, and `NoneTemplate` that defines the UI to display when the feed has no results.
 
-## WeatherApp Sample
+At this point, don't worry if you don't understand all of the details of the code. We'll cover the details in the following sections.
 
-You can find the code for our weather app here: https://github.com/unoplatform/Uno.Samples/tree/master/UI/MvuxHowTos/WeatherApp
+
 
 ## What is MVUX?
 
@@ -521,3 +472,9 @@ You can then use the example above as a reference to create your own solution.
 
 - Bindable proxies have already been generated for you
 - You just need to create an instance of the bindable proxy for your Model and assign it to the `DataContext` and it is done.  
+
+
+## WeatherApp Sample
+
+You can find the code for our weather app here: https://github.com/unoplatform/Uno.Samples/tree/master/UI/MvuxHowTos/WeatherApp
+
