@@ -4,16 +4,16 @@ uid: Overview.Mvux.Overview
 
 # MVUX Overview
 
-**M**odel, **V**iew, **U**pdate, e**X**tended (**MVUX**) is an implementation of the Model-View-Update design pattern, that encourages the flow of immutable data in a single direction. What differentiates MVUX from other MVU implementations is that it supports both XAML and C# data binding. 
+**M**odel, **V**iew, **U**pdate, e**X**tended (**MVUX**) is an implementation of the Model-View-Update design pattern, that encourages the flow of immutable data in a single direction. What differentiates MVUX from other MVU implementations is that it has been designed to support data binding. 
 
 
 ## Why MVUX?
 
 To better understand the need for MVUX, let us consider a weather application that will display the current temperature, obtained from an external weather service. At face value, this seems simple enough. All the app has to do is call a service to retrieve latest temperature and display the returned value. 
 
-For example, the following MainViewModel initializes the CurrentWeather property with the current weather information obtained from the weather service. The XAML binds the CurrentWeather property of the DataContext (an instance of the MainViewModel) to the Text property of a TextBlock
+For example, the following MainViewModel initializes the CurrentWeather property with the information obtained from the weather service. The XAML binds the CurrentWeather property of the DataContext (an instance of the MainViewModel) to the Text property of a TextBlock
   
-# [C#](#tab/csharp)
+# [MainViewModel](#tab/viewmodel)
 
 ```csharp
 public partial class MainViewModel : ObservableObject
@@ -37,7 +37,7 @@ public partial class MainViewModel : ObservableObject
 ```
 The `ObservableObject` comes from the `CommunityToolkit.Mvvm` package and provides an implementation of INotifyPropertyChanged, which is used to notify the UI when property values change. The `ObservableProperty` attribute (also from the `CommunityToolkit.Mvvm` package) is used to instruct the source code generator to emit properties that include raising the PropertyChanged event when the value changes. In this case the `CurrentWeather` property is generated and will raise the PropertyChanged event when the value is set in the `LoadWeather` method.
 
-# [XAML](#tab/xaml)
+# [MainPage](#tab/page)
 
 ```xml
 <Page x:Class="WeatherSampleApp.MainPage"
@@ -49,6 +49,16 @@ The `ObservableObject` comes from the `CommunityToolkit.Mvvm` package and provid
 	</StackPanel>
 </Page>
 ```
+The DataContext on the MainPage is set to be an instance of the MainViewModel
+
+```csharp
+public MainPage()
+{
+    this.InitializeComponent();
+
+    DataContext = new MainViewModel(new WeatherService());
+}
+```
 ----
 Here's this simple application running:  
 ![Mvvm Weather App](Assets/MvvmWeather.jpg)
@@ -57,13 +67,13 @@ Here's this simple application running:
 Calling the GetCurrentWeather and displaying the resulting Temperature using XAML is simple enough. However, there are a few things we should consider:
 
 - If the GetCurrentWeather method takes a finite amount of time to complete, what should be displayed while the app is waiting for the result?
-- If the GetCurrentWeather service fails, for example due to network issues, should the app display an error?
+- If the GetCurrentWeather service fails, for example due to network issues, the app should display an error?
 - If the GetCurrentWeather service returns no data, what should the app show?
 - How can the user force the data to be refreshed?
 
 The following updated code addresses these points. As you can the updated code is significantly more complex than the original code.
 
-# [C#](#tab/csharp)
+# [MainViewModel](#tab/viewmodel)
 
 ```csharp
 public partial class MainViewModel : ObservableObject
@@ -102,8 +112,9 @@ public partial class MainViewModel : ObservableObject
     }
 }
 ```
+IsError and NoResults properties are generated from the _isError and _noResults fields respectively. The LoadWeather method now has the `RelayCommand` attribute which will generate LoadWeatherCommand that includes an IsRunning property. The IsError, NoResults and IsRunning properties are used to control the visibility of the UI elements in the XAML.
 
-# [XAML](#tab/xaml)
+# [MainPage](#tab/page)
 
 ```xml
 <Page x:Class="WeatherSampleApp.MainPage"
@@ -171,6 +182,7 @@ public partial class MainViewModel : ObservableObject
 	</StackPanel>
 </Page>
 ```
+The XAML includes four visual states which are triggered based on the value of IsError, NoResults and LoadWeatherCommand.IsRunning. The Get Weather Button is data bound to the LoadWeatherCommand, which will invoke the LoadWeather method when the Button is pressed.
 ----
 
 Here's the updated application running, showing the progress ring in action while the data is loading and a Get Weather Button for refreshing the data.
@@ -181,20 +193,16 @@ This simple example illustrates how quickly simple code can grow in complexity w
 
 Let's take a look at an equivalent weather application written using MVUX.
 
-# [C#](#tab/csharp)
+# [MainModel](#tab/model)
 
 ```csharp
-public partial record WeatherModel(IWeatherService WeatherService)
+public partial record MainModel(IWeatherService WeatherService)
 {
-    public IFeed<WeatherInfo> CurrentWeather => Feed<WeatherInfo>.Async(async ct=>
-        await this.WeatherService.GetCurrentWeather(ct) is { } weather
-                ? Option.Some(weather)
-                : Option.None<WeatherInfo>()
-    );
+    public IFeed<WeatherInfo> CurrentWeather => Feed.Async(this.WeatherService.GetCurrentWeather);
 }
 ```
 
-# [XAML](#tab/xaml)
+# [MainPage](#tab/page)
 
 ```xml
 <Page x:Class="WeatherSampleApp.MainPage"
@@ -234,6 +242,16 @@ public partial record WeatherModel(IWeatherService WeatherService)
 	</StackPanel>
 </Page>
 ```
+The DataContext on the MainPage is set to be an instance of the BindableMainModel, which is a wrapper around the MainModel that generated by MVUX to provide data binding support to the MainModel. 
+
+```csharp
+public MainPage()
+{
+    this.InitializeComponent();
+
+    DataContext = new BindableMainModel(new WeatherService());
+}
+```
 ----
 
 Here's a quick summary of the changes:
@@ -242,20 +260,23 @@ Here's a quick summary of the changes:
 - The MainPage XAML has been simplified to use the `FeedView` control, which automatically handles the various states of the feed.
 - The `FeedView` control has a `Source` property that is bound to the `CurrentWeather` property of the `MainModel`.
 - The `FeedView` control has a `ValueTemplate` that defines the UI to display when the feed has a value, `ProgressTemplate` that defines the UI to display when the feed is loading, `ErrorTemplate` that defines the UI to display when the feed has an error, and `NoneTemplate` that defines the UI to display when the feed has no results.
+- The Get Weather Button is data bound to the `Refresh` command of the `FeedView` control, which will cause the `IFeed` to invoke the GetCurrentWeather method when the Button is pressed.
 
-At this point, don't worry if you don't understand all of the details of the code. We'll cover the details in the following sections.
-
-
+At this point, don't worry if you don't understand all of the details of the code. We'll cover the details in the following sections. For now, it's important to understand that the MainModel code is much simpler, and that the `FeedView` control handles the various states of the application.
 
 ## What is MVUX?
 
-MVUX is an extension to the MVU design pattern, and leverages code generation in order to take advantage of the unique data-binding engine of WinUI and the Uno Platform.
+Now that you've seen an example of MVUX in action, let's discuss the main components of MVUX. 
 
 ### Model
 
-The **Model** in MVUX is similar in many ways to the viewmodel in MVVM in that it defines the properties that will be available for data binding and methods that include any business logic. In MVUX this is referred to as the Model, highlighting that it is immutable by design.
+As we saw in the example, the **Model** in MVUX (eg MainModel) is similar in many ways to the ViewModel in MVVM (eg MainViewModel). It defines the properties that will be available for data binding and any methods that will handle user interactions. 
 
-For our weather app, `WeatherModel` is the **Model**, and defines a property named `CurrentWeather`.
+The **Model** part of MVUX also implicitly refers to any data entities that are used by the application. In this case, the `WeatherInfo` class, returned by the GetCurrentWeather method, is considered part of the **Model**.
+
+In MVUX the **Model** is treated as immutable, meaning that both MainModel and WeatherInfo can be defined as `record` types. This is a key difference between MVUX and MVVM, where the ViewModel is typically mutable.
+
+For our weather app, `MainModel` is the **Model**, and defines a property named `CurrentWeather`.
 
 ```csharp
 public partial record WeatherModel(IWeatherService WeatherService)
@@ -264,11 +285,13 @@ public partial record WeatherModel(IWeatherService WeatherService)
 }
 ```
 
-The `CurrentWeather` property returns a feed (`IFeed`) of `WeatherInfo` entities (for those familiar with [Reactive](https://reactivex.io/) this is similar in many ways to an `IObservable`). When the `CurrentWeather` property is accessed, an `IFeed` is created via the `Feed.Async` factory method, which will asynchronously call the `GetCurrentWeather` service.  
+The `CurrentWeather` property returns a feed (`IFeed`) of `WeatherInfo` entities (for those familiar with [Reactive](https://reactivex.io/) this is similar to an `IObservable`). When the `CurrentWeather` property is accessed, an `IFeed` is created via the `Feed.Async` factory method, which will asynchronously call the `GetCurrentWeather` service.  
+
+Feeds are covered in more detail in the [Feeds](xref:Overview.Mvux.Feeds) documentation.
 
 ### View
 
-The **View** is the UI, which can be written in XAML, C#, or a combination of the two, in the same way that you would if you were using another design pattern. For example, the following can be used to data bind the `Text` property of a `TextBlock` to the `CurrentWeather.Temperature` property.
+The **View** is the UI, which can be written in XAML, C#, or a combination of the two. For example, the following can be used to data bind the `Text` property of a `TextBlock` to the `CurrentWeather.Temperature` property.
 
 ```xml
 <Page x:Class="WeatherApp.MainPage"
@@ -280,9 +303,22 @@ The **View** is the UI, which can be written in XAML, C#, or a combination of th
 </Page>
 ```  
 
-If you're familiar with MVVM, the above XAML would look familiar, as it's the same XAML you would write if you had a viewmodel that exposed a `CurrentWeather` property that returns an entity that has a `Temperature` property.  
+Unlike MVVM where the DataContext of the page would be set to an instance of the ViewModel, in MVUX the DataContext is set to an instance of a bindable proxy class that wraps the Model. This is done to provide data binding support to the Model. In this case, the bindable proxy for MainModel is named `BindableMainModel`.
 
-What's unique to MVUX is the additional information that `IFeed` exposes, such as when data is being loaded and whether there was an error loading the data. For this, we can leverage the MVUX `FeedView` control.
+```csharp
+public MainPage()
+{
+    this.InitializeComponent();
+
+    DataContext = new BindableMainModel(new WeatherService());
+}
+```
+
+The generated `BindableMainModel` exposes the `IFeed` properties of the `MainModel` in a way that they can be data bound using simple data binding expressions, for example `{Binding CurrentWeather.Temperature}`. 
+
+What's unique to MVUX is the additional information that `IFeed` exposes. The `IFeed` will include information about the state of the asynchronous operation, including whether the operation is loading, whether there was an error, or whether there was no data returned. This information can be used to display the appropriate UI to the user.
+
+For this, we can leverage the MVUX `FeedView` control, that has been designed to work with `IFeed` sources and exposes an simple way for developers to define what the layout should be for the different states of the asynchronous operation.
 
 ```xml
 <Page x:Class="WeatherApp.MainPage"
@@ -291,17 +327,53 @@ What's unique to MVUX is the additional information that `IFeed` exposes, such a
     xmlns:mvux="using:Uno.Extensions.Reactive.UI">
     
     <mvux:FeedView Source="{Binding CurrentWeather}">
-        <DataTemplate>
-            <StackPanel>
-                <TextBlock Text="{Binding Data.Temperature}" />
-            </StackPanel>
-        </DataTemplate>
+        <mvux:FeedView.ValueTemplate>
+            <DataTemplate>
+                <TextBlock>
+                    <Run Text="Current temperature: " />
+                    <Run Text="{Binding Data.Temperature}" />
+                </TextBlock>
+            </DataTemplate>
+        </mvux:FeedView.ValueTemplate>
     </mvux:FeedView>
-    
 </Page>
 ```
 
-The `FeedView` control is designed to work with an `IFeed`, and has different visual states that align with the different states that an `IFeed` can be in (e.g. loading, refreshing, error, etc.). The above XAML defines the `ValueTemplate`, which is required in order to display the `Data` from the `IFeed`. Other templates include `ProgressTemplate`, `ErrorTemplate` and `NoneTemplate`, which can be defined in order to control what's displayed depending on the state of the `IFeed`.
+The `FeedView` control has different visual states that align with the different states that an `IFeed` can be in (e.g. loading, refreshing, error, etc.). The above XAML defines the `ValueTemplate`, which is required in order to display the `Data` from the `IFeed`. Other templates include `ProgressTemplate`, `ErrorTemplate` and `NoneTemplate`, which can be defined in order to control what's displayed depending on the state of the `IFeed`.
+
+```xml
+<Page x:Class="WeatherApp.MainPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:mvux="using:Uno.Extensions.Reactive.UI">
+    
+    <mvux:FeedView Source="{Binding CurrentWeather}">
+        <mvux:FeedView.ValueTemplate>
+            <DataTemplate>
+                <TextBlock>
+                    <Run Text="Current temperature: " />
+                    <Run Text="{Binding Data.Temperature}" />
+                </TextBlock>
+            </DataTemplate>
+        </mvux:FeedView.ValueTemplate>
+        <mvux:FeedView.ProgressTemplate>
+            <DataTemplate>
+                <ProgressRing />
+            </DataTemplate>
+        </mvux:FeedView.ProgressTemplate>
+        <mvux:FeedView.ErrorTemplate>
+            <DataTemplate>
+                <TextBlock Text="Error" />
+            </DataTemplate>
+        </mvux:FeedView.ErrorTemplate>
+        <mvux:FeedView.NoneTemplate>
+            <DataTemplate>
+                <TextBlock Text="No Results" />
+            </DataTemplate>
+        </mvux:FeedView.NoneTemplate>
+    </mvux:FeedView>
+</Page>
+```
 
 ### Update
 
