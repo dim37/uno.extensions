@@ -4,6 +4,8 @@ uid: Overview.Mvux.Advanced.Messaging
 
 # Messaging
 
+Messaging is the ability to send in-app messages between its components, in a way that enables them to remain coupled from one another.
+
 ## Community Toolkit messenger
 
 The Community Toolkit messenger can be used as a central tool to send and receive global messages between objects in the app. The advantage of the messenger is that objects can remain decoupled from each other as the messenger enables sending the messages around without keeping a strong reference between the sender and the receiver. The messages can also be sent over specific channels uniquely identified by a token or within certain areas of the application.
@@ -72,6 +74,8 @@ public partial record AnotherModel
 ```
 
 ## MVUX integration with the messenger
+
+MVUX can pull information from services, but often there needs to be a way to get notifications from the service of entity changes. This is when messaging can come handy.
 
 MVUX harnesses the power of the Community Toolkit messenger and adds extension methods that enable you to listen to entity changes received from the messenger and have them automatically applied to the state or list-state storing the entities in the current model. The following entity-change types are supported: created, updated, and deleted.
 
